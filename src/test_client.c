@@ -1,11 +1,23 @@
 #include <stdio.h> 
 #include <sys/socket.h>
 #include <netinet/in.h> 
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>  
+#include "utils.h"
 #define BUFF_LEN 2048
 
+
+void query(int fd, char* text) {
+    char buff[BUFF_LEN]; 
+    int len = strlen(text)+1; 
+    memcpy(buff, &len, sizeof(uint32_t));
+    strcpy(buff+sizeof(uint32_t), text);
+    full_write(fd, buff, len + sizeof(uint32_t));
+
+    char rbuf[BUFF_LEN]; 
+    full_read(fd, rbuf, sizeof(uint32_t) + len); 
+    printf("client: %s\n", rbuf + sizeof(uint32_t)); 
+}
 
 int main() {
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -20,16 +32,7 @@ int main() {
         printf("client: connection refused\n"); 
         exit(-1); 
     }
-    char buff[BUFF_LEN]; 
-    strcpy(buff, "hello server!"); 
-    write(sock_fd, buff, BUFF_LEN); 
-
-    char rbuf[BUFF_LEN]; 
-
-    int num_read = read(sock_fd, rbuf, BUFF_LEN);
-
-    printf("client: %s\n", rbuf); 
-
+    query(sock_fd, "Hello voa!"); 
     return 0; 
 }
 

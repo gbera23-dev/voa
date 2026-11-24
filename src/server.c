@@ -3,26 +3,51 @@
 #include <netinet/in.h> 
 #include <unistd.h>
 #include <stdlib.h> 
+#include <string.h>
+#include "utils.h"
 #define BUFF_LEN 2048
+#define true 1 
+#define false 0 
 
-void die(char* str) {
-    printf("voa: error %s\n", str); 
-    exit(-1); 
-}
+typedef struct __attribute__((packed)){
+    uint32_t len; 
+    char* payload; 
+} message; 
 
-//simple echo 
-void serve_client(int client_sock_fd) {
-    char buffer[BUFF_LEN]; 
-    int num_read = read(client_sock_fd, buffer, BUFF_LEN);
-    printf("voa: client sent \"%s\"\n", buffer); 
-    write(client_sock_fd, buffer, num_read); 
+
+int resolve_request(int fd, message* msg) {
+    if(full_read(fd, (char*)msg, sizeof(int32_t))) {
+        return -1; 
+    }
+    char buff[BUFF_LEN]; 
+    if(full_read(fd, buff, msg->len)) {
+        return -1; 
+    }
+    msg->payload = malloc(msg->len);
+    strcpy(msg->payload, buff);  
+    return 0; 
+} 
+
+int serve_client(int client_sock_fd) {
+    message msg = {};
+    if(resolve_request(client_sock_fd, &msg)) {
+        printf("voa: something went wrong during parsing request\n"); 
+        char* err = "please, send a proper request following protocol";
+        full_write(client_sock_fd, err, strlen(err)+1);
+        return -1; 
+    }
+    full_write(client_sock_fd, (char*)&msg, sizeof(uint32_t));
+    full_write(client_sock_fd, msg.payload, msg.len);
+    printf("voa: got message %s\n", msg.payload); 
+    free(msg.payload); 
+    return 0; 
 }
 
 void accept_requests(int listening_sock_fd) {
-    while(1) {
+    while(true) {
 
         struct sockaddr_in sockaddr = {}; 
-        int len = sizeof(sockaddr); 
+        socklen_t len = sizeof(sockaddr); 
 
         int client_fd = accept(listening_sock_fd, 
             (struct sockaddr*)&sockaddr, &len);
@@ -31,7 +56,12 @@ void accept_requests(int listening_sock_fd) {
             continue; 
         }
 
-        serve_client(client_fd); 
+        while(true) {
+            int32_t cs = serve_client(client_fd); 
+            if(!cs) {
+                break; 
+            }
+        }
 
         close(client_fd); 
     }
